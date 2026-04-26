@@ -26,6 +26,9 @@ main
 
 - App source is committed and pushed to GitHub.
 - UI renders a compact clock/weather dashboard with LVGL.
+- UI includes city, Wi-Fi state, date/time, weather badge text, current
+  temperature, description, feels-like, humidity, wind, and last update time.
+- UI switches between day and night themes using OpenWeather sunrise/sunset data.
 - Weather is fetched from OpenWeather by city/country.
 - Time sync uses SNTP and German POSIX timezone.
 - Real local secrets are kept in `main/wifi_secrets.h` and ignored by git.
@@ -100,6 +103,8 @@ Issues fixed during initial GitHub cleanup:
 - Added Russian README.
 - Cleaned broken mojibake comments/strings from source files.
 - Improved UI layout and status text.
+- Added day/night theme, weather badge text, city/Wi-Fi header, `Updated HH:MM`
+  status, degree Celsius labels, and wind in km/h.
 - Improved URL encoding for OpenWeather query parameters.
 - Ignored local `.vscode/settings.json`, `build/`, `managed_components/`,
   `sdkconfig`, and `main/wifi_secrets.h`.
