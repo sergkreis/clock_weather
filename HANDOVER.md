@@ -26,10 +26,11 @@ main
 
 - App source is committed and pushed to GitHub.
 - UI renders a compact clock/weather dashboard with LVGL.
-- UI includes city, Wi-Fi state, date/time, drawn LVGL weather icon, current
+- UI includes city, Wi-Fi state, date/time with seconds, drawn LVGL weather icon, current
   temperature, description, feels-like, humidity, wind, and last update time.
 - Center block uses an icon-left / temperature-right layout with no heavy
-  separator line through the weather area.
+  separator line through the weather area. The layout is intentionally denser
+  to better use the 240x320 screen.
 - UI switches between day and night themes using OpenWeather sunrise/sunset data.
 - Weather is fetched from OpenWeather by city/country.
 - Time sync uses SNTP and German POSIX timezone.

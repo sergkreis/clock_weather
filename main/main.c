@@ -229,27 +229,27 @@ static void ui_create_weather_icon(lv_obj_t *parent)
     static const lv_point_precise_t rain_3[] = {{54, 45}, {48, 58}};
 
     lv_obj_t *box = lv_obj_create(parent);
-    lv_obj_set_size(box, 76, 66);
-    lv_obj_align(box, LV_ALIGN_CENTER, -60, -23);
+    lv_obj_set_size(box, 96, 78);
+    lv_obj_align(box, LV_ALIGN_CENTER, -54, -10);
     lv_obj_set_style_bg_opa(box, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(box, 0, 0);
     lv_obj_set_style_pad_all(box, 0, 0);
 
-    icon_sun = create_icon_circle(box, 36, 20, 8);
-    icon_moon_mask = create_icon_circle(box, 30, 34, 4);
+    icon_sun = create_icon_circle(box, 44, 24, 6);
+    icon_moon_mask = create_icon_circle(box, 36, 44, 2);
 
-    icon_cloud_a = create_icon_circle(box, 28, 11, 25);
-    icon_cloud_b = create_icon_circle(box, 34, 26, 17);
-    icon_cloud_c = create_icon_circle(box, 24, 47, 29);
-    icon_cloud_base = create_icon_rect(box, 48, 20, 16, 36, 10);
+    icon_cloud_a = create_icon_circle(box, 36, 11, 29);
+    icon_cloud_b = create_icon_circle(box, 44, 30, 18);
+    icon_cloud_c = create_icon_circle(box, 30, 58, 34);
+    icon_cloud_base = create_icon_rect(box, 66, 25, 17, 45, 13);
 
     icon_rain_1 = create_icon_line(box, rain_1);
     icon_rain_2 = create_icon_line(box, rain_2);
     icon_rain_3 = create_icon_line(box, rain_3);
 
-    icon_snow_1 = create_icon_circle(box, 5, 19, 55);
-    icon_snow_2 = create_icon_circle(box, 5, 36, 57);
-    icon_snow_3 = create_icon_circle(box, 5, 53, 55);
+    icon_snow_1 = create_icon_circle(box, 5, 24, 68);
+    icon_snow_2 = create_icon_circle(box, 5, 44, 70);
+    icon_snow_3 = create_icon_circle(box, 5, 64, 68);
 
     ui_set_weather_icon(WEATHER_ICON_WAIT);
 }
@@ -262,7 +262,7 @@ static lv_obj_t *create_dash_col(lv_obj_t *parent,
 {
     lv_obj_t *col = lv_obj_create(parent);
     lv_obj_set_size(col, 76, 48);
-    lv_obj_align(col, align, x_ofs, -28);
+    lv_obj_align(col, align, x_ofs, -32);
     lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(col, 0, 0);
     lv_obj_set_style_pad_all(col, 0, 0);
@@ -304,7 +304,7 @@ static void ui_create(void)
     lv_obj_set_style_text_font(label_date, &lv_font_montserrat_12, 0);
 
     label_time = lv_label_create(scr);
-    lv_label_set_text(label_time, "--:--");
+    lv_label_set_text(label_time, "--:--:--");
     lv_obj_align(label_time, LV_ALIGN_TOP_MID, 0, 36);
     lv_obj_set_style_text_font(label_time, &lv_font_montserrat_48, 0);
 
@@ -312,14 +312,14 @@ static void ui_create(void)
 
     label_temp = lv_label_create(scr);
     lv_label_set_text(label_temp, "--.- C");
-    lv_obj_align(label_temp, LV_ALIGN_CENTER, 42, -25);
+    lv_obj_align(label_temp, LV_ALIGN_CENTER, 47, -15);
     lv_obj_set_style_text_font(label_temp, &lv_font_montserrat_28, 0);
 
     label_desc = lv_label_create(scr);
     lv_label_set_long_mode(label_desc, LV_LABEL_LONG_DOT);
     lv_obj_set_width(label_desc, 210);
     lv_label_set_text(label_desc, "Updating weather");
-    lv_obj_align(label_desc, LV_ALIGN_CENTER, 0, 22);
+    lv_obj_align(label_desc, LV_ALIGN_CENTER, 0, 42);
     lv_obj_set_style_text_align(label_desc, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(label_desc, &lv_font_montserrat_16, 0);
 
@@ -387,7 +387,7 @@ static void ui_set_time_now(void)
     ui_set_wifi_status();
 
     if (!time_is_valid()) {
-        lv_label_set_text(label_time, "--:--");
+        lv_label_set_text(label_time, "--:--:--");
         lv_label_set_text(label_date, "Waiting for time");
         return;
     }
@@ -399,7 +399,7 @@ static void ui_set_time_now(void)
     time(&now);
     localtime_r(&now, &ti);
 
-    strftime(buf, sizeof(buf), "%H:%M", &ti);
+    strftime(buf, sizeof(buf), "%H:%M:%S", &ti);
     lv_label_set_text(label_time, buf);
 
     strftime(buf, sizeof(buf), "%a %d %b", &ti);
