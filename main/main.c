@@ -26,7 +26,6 @@ LV_FONT_DECLARE(lv_font_montserrat_48);
 
 static const char *TAG = "main";
 
-static lv_obj_t *line_top;
 static lv_obj_t *line_bottom;
 static lv_obj_t *label_city;
 static lv_obj_t *label_wifi;
@@ -108,9 +107,6 @@ static void ui_apply_theme(bool day)
     set_label_color(label_wind, lv_color_hex(theme->text));
     set_label_color(label_status, lv_color_hex(theme->dim));
 
-    if (line_top) {
-        lv_obj_set_style_bg_color(line_top, lv_color_hex(theme->line), 0);
-    }
     if (line_bottom) {
         lv_obj_set_style_bg_color(line_bottom, lv_color_hex(theme->line), 0);
     }
@@ -182,8 +178,6 @@ static void ui_create(void)
     lv_label_set_text(label_time, "--:--");
     lv_obj_align(label_time, LV_ALIGN_TOP_MID, 0, 36);
     lv_obj_set_style_text_font(label_time, &lv_font_montserrat_48, 0);
-
-    line_top = create_separator(scr, LV_ALIGN_TOP_MID, 102);
 
     label_weather_icon = lv_label_create(scr);
     lv_label_set_text(label_weather_icon, "WAIT");
