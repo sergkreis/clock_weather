@@ -28,8 +28,11 @@ static const char *TAG = "main";
 
 static lv_obj_t *label_city;
 static lv_obj_t *label_wifi;
-static lv_obj_t *label_time;
 static lv_obj_t *label_date;
+static lv_obj_t *label_hour;
+static lv_obj_t *label_colon;
+static lv_obj_t *label_minute;
+static lv_obj_t *label_second;
 static lv_obj_t *icon_sun;
 static lv_obj_t *icon_moon_mask;
 static lv_obj_t *icon_cloud_a;
@@ -167,7 +170,10 @@ static void ui_apply_theme(bool day)
     set_label_color(label_city, lv_color_hex(theme->dim));
     set_label_color(label_wifi, lv_color_hex(wifi_manager_is_connected() ? theme->icon : theme->dim));
     set_label_color(label_date, lv_color_hex(theme->dim));
-    set_label_color(label_time, lv_color_hex(theme->text));
+    set_label_color(label_hour, lv_color_hex(theme->text));
+    set_label_color(label_colon, lv_color_hex(theme->text));
+    set_label_color(label_minute, lv_color_hex(theme->text));
+    set_label_color(label_second, lv_color_hex(theme->dim));
     set_label_color(label_temp, lv_color_hex(theme->accent));
     set_label_color(label_desc, lv_color_hex(theme->muted));
     set_label_color(label_feels, lv_color_hex(theme->text));
@@ -229,27 +235,27 @@ static void ui_create_weather_icon(lv_obj_t *parent)
     static const lv_point_precise_t rain_3[] = {{54, 45}, {48, 58}};
 
     lv_obj_t *box = lv_obj_create(parent);
-    lv_obj_set_size(box, 96, 78);
-    lv_obj_align(box, LV_ALIGN_CENTER, -54, -10);
+    lv_obj_set_size(box, 70, 58);
+    lv_obj_align(box, LV_ALIGN_CENTER, -68, -3);
     lv_obj_set_style_bg_opa(box, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(box, 0, 0);
     lv_obj_set_style_pad_all(box, 0, 0);
 
-    icon_sun = create_icon_circle(box, 44, 24, 6);
-    icon_moon_mask = create_icon_circle(box, 36, 44, 2);
+    icon_sun = create_icon_circle(box, 32, 18, 5);
+    icon_moon_mask = create_icon_circle(box, 26, 32, 2);
 
-    icon_cloud_a = create_icon_circle(box, 36, 11, 29);
-    icon_cloud_b = create_icon_circle(box, 44, 30, 18);
-    icon_cloud_c = create_icon_circle(box, 30, 58, 34);
-    icon_cloud_base = create_icon_rect(box, 66, 25, 17, 45, 13);
+    icon_cloud_a = create_icon_circle(box, 25, 8, 22);
+    icon_cloud_b = create_icon_circle(box, 31, 22, 14);
+    icon_cloud_c = create_icon_circle(box, 21, 43, 26);
+    icon_cloud_base = create_icon_rect(box, 47, 18, 12, 34, 9);
 
     icon_rain_1 = create_icon_line(box, rain_1);
     icon_rain_2 = create_icon_line(box, rain_2);
     icon_rain_3 = create_icon_line(box, rain_3);
 
-    icon_snow_1 = create_icon_circle(box, 5, 24, 68);
-    icon_snow_2 = create_icon_circle(box, 5, 44, 70);
-    icon_snow_3 = create_icon_circle(box, 5, 64, 68);
+    icon_snow_1 = create_icon_circle(box, 4, 17, 50);
+    icon_snow_2 = create_icon_circle(box, 4, 32, 52);
+    icon_snow_3 = create_icon_circle(box, 4, 47, 50);
 
     ui_set_weather_icon(WEATHER_ICON_WAIT);
 }
@@ -303,23 +309,38 @@ static void ui_create(void)
     lv_obj_align(label_date, LV_ALIGN_TOP_MID, 0, 24);
     lv_obj_set_style_text_font(label_date, &lv_font_montserrat_12, 0);
 
-    label_time = lv_label_create(scr);
-    lv_label_set_text(label_time, "--:--:--");
-    lv_obj_align(label_time, LV_ALIGN_TOP_MID, 0, 36);
-    lv_obj_set_style_text_font(label_time, &lv_font_montserrat_48, 0);
+    label_hour = lv_label_create(scr);
+    lv_label_set_text(label_hour, "--");
+    lv_obj_align(label_hour, LV_ALIGN_TOP_LEFT, 33, 45);
+    lv_obj_set_style_text_font(label_hour, &lv_font_montserrat_48, 0);
+
+    label_colon = lv_label_create(scr);
+    lv_label_set_text(label_colon, ":");
+    lv_obj_align(label_colon, LV_ALIGN_TOP_LEFT, 94, 45);
+    lv_obj_set_style_text_font(label_colon, &lv_font_montserrat_48, 0);
+
+    label_minute = lv_label_create(scr);
+    lv_label_set_text(label_minute, "--");
+    lv_obj_align(label_minute, LV_ALIGN_TOP_LEFT, 112, 45);
+    lv_obj_set_style_text_font(label_minute, &lv_font_montserrat_48, 0);
+
+    label_second = lv_label_create(scr);
+    lv_label_set_text(label_second, "--");
+    lv_obj_align(label_second, LV_ALIGN_TOP_LEFT, 176, 61);
+    lv_obj_set_style_text_font(label_second, &lv_font_montserrat_28, 0);
 
     ui_create_weather_icon(scr);
 
     label_temp = lv_label_create(scr);
     lv_label_set_text(label_temp, "--.- C");
-    lv_obj_align(label_temp, LV_ALIGN_CENTER, 47, -15);
-    lv_obj_set_style_text_font(label_temp, &lv_font_montserrat_28, 0);
+    lv_obj_align(label_temp, LV_ALIGN_CENTER, 45, -5);
+    lv_obj_set_style_text_font(label_temp, &lv_font_montserrat_48, 0);
 
     label_desc = lv_label_create(scr);
     lv_label_set_long_mode(label_desc, LV_LABEL_LONG_DOT);
     lv_obj_set_width(label_desc, 210);
     lv_label_set_text(label_desc, "Updating weather");
-    lv_obj_align(label_desc, LV_ALIGN_CENTER, 0, 42);
+    lv_obj_align(label_desc, LV_ALIGN_CENTER, 0, 50);
     lv_obj_set_style_text_align(label_desc, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(label_desc, &lv_font_montserrat_16, 0);
 
@@ -380,14 +401,17 @@ static void ui_set_updated_now(void)
 
 static void ui_set_time_now(void)
 {
-    if (!label_time || !label_date) {
+    if (!label_hour || !label_colon || !label_minute || !label_second || !label_date) {
         return;
     }
 
     ui_set_wifi_status();
 
     if (!time_is_valid()) {
-        lv_label_set_text(label_time, "--:--:--");
+        lv_label_set_text(label_hour, "--");
+        lv_label_set_text(label_colon, ":");
+        lv_label_set_text(label_minute, "--");
+        lv_label_set_text(label_second, "--");
         lv_label_set_text(label_date, "Waiting for time");
         return;
     }
@@ -399,8 +423,16 @@ static void ui_set_time_now(void)
     time(&now);
     localtime_r(&now, &ti);
 
-    strftime(buf, sizeof(buf), "%H:%M:%S", &ti);
-    lv_label_set_text(label_time, buf);
+    strftime(buf, sizeof(buf), "%H", &ti);
+    lv_label_set_text(label_hour, buf);
+
+    lv_label_set_text(label_colon, (ti.tm_sec % 2) == 0 ? ":" : " ");
+
+    strftime(buf, sizeof(buf), "%M", &ti);
+    lv_label_set_text(label_minute, buf);
+
+    strftime(buf, sizeof(buf), "%S", &ti);
+    lv_label_set_text(label_second, buf);
 
     strftime(buf, sizeof(buf), "%a %d %b", &ti);
     lv_label_set_text(label_date, buf);
