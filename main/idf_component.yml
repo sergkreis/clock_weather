@@ -1,0 +1,3 @@
+dependencies:
+  espressif/esp_lvgl_port: "*"
+  lvgl/lvgl: "^9"
