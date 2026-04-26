@@ -1,21 +1,29 @@
 # Clock Weather
 
-ESP-IDF weather clock for the ESP32 Cheap Yellow Display (ESP32-2432S028R).
+Часы с погодой для ESP32 Cheap Yellow Display (`ESP32-2432S028R`).
 
-The app connects to Wi-Fi, syncs time over SNTP, fetches current weather from
-OpenWeather, and renders a compact dashboard with LVGL.
+Проект подключается к Wi-Fi, синхронизирует время через SNTP, получает текущую
+погоду из OpenWeather и показывает компактный экран на LVGL: дата, время,
+температура, описание погоды, ощущается как, влажность и ветер.
 
-## Hardware
+## Железо
 
 - ESP32-2432S028R / Cheap Yellow Display
-- ST7789 LCD over SPI
+- LCD ST7789 по SPI
 
-## Setup
+## Стек
 
-1. Install ESP-IDF 5.5.x.
-2. Copy `main/wifi_secrets.example.h` to `main/wifi_secrets.h`.
-3. Fill in Wi-Fi credentials and the OpenWeather API key.
-4. Build and flash:
+- ESP-IDF 5.5.x
+- LVGL 9
+- `espressif/esp_lvgl_port`
+- OpenWeather API
+
+## Настройка
+
+1. Установить ESP-IDF 5.5.x.
+2. Скопировать `main/wifi_secrets.example.h` в `main/wifi_secrets.h`.
+3. Заполнить Wi-Fi и OpenWeather API key в `main/wifi_secrets.h`.
+4. Собрать и прошить:
 
 ```powershell
 idf.py set-target esp32
@@ -23,12 +31,32 @@ idf.py build
 idf.py flash monitor
 ```
 
-## Configuration
+## Конфигурация
 
-Runtime settings live in `main/app_config.h`:
+Основные настройки лежат в `main/app_config.h`:
 
-- city/country/language for OpenWeather
-- weather refresh interval
-- POSIX timezone string
+- город, страна и язык для OpenWeather;
+- интервал обновления погоды;
+- POSIX timezone для локального времени.
 
-Do not commit `main/wifi_secrets.h`; it contains local credentials.
+## Секреты
+
+`main/wifi_secrets.h` содержит локальные Wi-Fi данные и OpenWeather API key.
+Этот файл исключён из git и не должен попадать в GitHub.
+
+Для GitHub есть только безопасный шаблон:
+
+```text
+main/wifi_secrets.example.h
+```
+
+## Текущее состояние
+
+Проект подготовлен как переносимый ESP-IDF репозиторий. В GitHub отправлены
+исходники, README, devcontainer, lock-файл зависимостей и шаблон секретов.
+
+Локальную сборку нужно прогнать после восстановления ESP-IDF Python окружения:
+
+```text
+C:\Users\Sergej\.espressif\python_env\idf5.5_py3.13_env
+```
