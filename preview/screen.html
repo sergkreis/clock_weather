@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clock Weather Screen Preview</title>
+  <style>
+    :root {
+      --page-bg: #20242b;
+      --panel: #2b3038;
+      --panel-border: #454c56;
+      --control-text: #e5e7eb;
+      --control-muted: #9ca3af;
+      --bg: #05070a;
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+      --dim: #7d8793;
+      --accent: #ffc857;
+      --icon: #60a5fa;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: var(--page-bg);
+      color: var(--control-text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    main {
+      display: flex;
+      gap: 28px;
+      align-items: center;
+      padding: 24px;
+    }
+
+    .device-wrap {
+      padding: 16px;
+      border: 1px solid var(--panel-border);
+      background: #15181d;
+    }
+
+    .screen {
+      position: relative;
+      width: 240px;
+      height: 320px;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Montserrat", "Arial", sans-serif;
+    }
+
+    .label {
+      position: absolute;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: 0;
+      line-height: 1;
+    }
+
+    .city {
+      left: 10px;
+      top: 8px;
+      width: 118px;
+      color: var(--dim);
+      font-size: 12px;
+    }
+
+    .wifi {
+      right: 10px;
+      top: 8px;
+      color: var(--icon);
+      font-size: 12px;
+    }
+
+    .date {
+      left: 40px;
+      top: 24px;
+      width: 160px;
+      text-align: center;
+      color: var(--dim);
+      font-size: 12px;
+    }
+
+    .hour, .colon, .minute {
+      top: 39px;
+      font-size: 58px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .hour {
+      left: 29px;
+    }
+
+    .colon {
+      left: 90px;
+    }
+
+    .minute {
+      left: 108px;
+    }
+
+    .second {
+      left: 172px;
+      top: 61px;
+      color: var(--dim);
+      font-size: 32px;
+      font-weight: 700;
+    }
+
+    .weather-icon {
+      position: absolute;
+      left: 9px;
+      top: 120px;
+      width: 70px;
+      height: 58px;
+    }
+
+    .sun, .moon-mask, .cloud-a, .cloud-b, .cloud-c, .cloud-base, .snow {
+      position: absolute;
+      border: 0;
+    }
+
+    .sun {
+      left: 18px;
+      top: 5px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--icon);
+    }
+
+    .moon-mask {
+      left: 32px;
+      top: 2px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--bg);
+      display: none;
+    }
+
+    .cloud-a {
+      left: 8px;
+      top: 22px;
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .cloud-b {
+      left: 22px;
+      top: 14px;
+      width: 31px;
+      height: 31px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .cloud-c {
+      left: 43px;
+      top: 26px;
+      width: 21px;
+      height: 21px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .cloud-base {
+      left: 12px;
+      top: 34px;
+      width: 47px;
+      height: 18px;
+      border-radius: 9px;
+      background: var(--muted);
+    }
+
+    .rain {
+      position: absolute;
+      width: 3px;
+      height: 16px;
+      border-radius: 3px;
+      background: var(--icon);
+      transform: rotate(25deg);
+      display: none;
+    }
+
+    .rain.r1 { left: 20px; top: 44px; }
+    .rain.r2 { left: 35px; top: 44px; }
+    .rain.r3 { left: 50px; top: 44px; }
+
+    .snow {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--icon);
+      display: none;
+    }
+
+    .snow.s1 { left: 17px; top: 50px; }
+    .snow.s2 { left: 32px; top: 52px; }
+    .snow.s3 { left: 47px; top: 50px; }
+
+    .temp {
+      left: 80px;
+      top: 114px;
+      width: 144px;
+      text-align: right;
+      color: var(--accent);
+      font-size: 56px;
+      font-weight: 700;
+    }
+
+    .desc {
+      left: 15px;
+      top: 195px;
+      width: 210px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .metric {
+      position: absolute;
+      bottom: 32px;
+      width: 76px;
+      height: 48px;
+      text-align: center;
+    }
+
+    .metric.left { left: 5px; }
+    .metric.mid { left: 82px; }
+    .metric.right { right: 5px; }
+
+    .metric-title {
+      display: block;
+      color: var(--dim);
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .metric-value {
+      position: absolute;
+      left: 1px;
+      right: 1px;
+      bottom: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .status {
+      left: 10px;
+      bottom: 10px;
+      width: 220px;
+      text-align: center;
+      color: var(--dim);
+      font-size: 12px;
+    }
+
+    .controls {
+      width: 260px;
+      padding: 16px;
+      border: 1px solid var(--panel-border);
+      background: var(--panel);
+    }
+
+    .controls h1 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .group {
+      margin-top: 16px;
+    }
+
+    .group label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--control-muted);
+      font-size: 12px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      height: 30px;
+      padding: 0 10px;
+      border: 1px solid #5d6673;
+      background: #1f242b;
+      color: var(--control-text);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    button.active {
+      border-color: #93c5fd;
+      background: #1e3a5f;
+    }
+
+    input {
+      width: 100%;
+      height: 30px;
+      border: 1px solid #5d6673;
+      background: #111827;
+      color: var(--control-text);
+      padding: 0 8px;
+      font: inherit;
+      font-size: 12px;
+    }
+
+    @media (max-width: 640px) {
+      main {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="device-wrap" aria-label="240 by 320 display preview">
+      <div class="screen" id="screen">
+        <div class="label city">Quedlinburg, DE</div>
+        <div class="label wifi">Wi-Fi OK</div>
+        <div class="label date">Sat 02 May</div>
+        <div class="label hour">19</div>
+        <div class="label colon">:</div>
+        <div class="label minute">50</div>
+        <div class="label second">24</div>
+
+        <div class="weather-icon" id="icon">
+          <div class="sun"></div>
+          <div class="moon-mask"></div>
+          <div class="cloud-a"></div>
+          <div class="cloud-b"></div>
+          <div class="cloud-c"></div>
+          <div class="cloud-base"></div>
+          <div class="rain r1"></div>
+          <div class="rain r2"></div>
+          <div class="rain r3"></div>
+          <div class="snow s1"></div>
+          <div class="snow s2"></div>
+          <div class="snow s3"></div>
+        </div>
+
+        <div class="label temp" id="temp">23 C</div>
+        <div class="label desc" id="desc">Scattered clouds</div>
+
+        <div class="metric left">
+          <span class="metric-title">Feel</span>
+          <span class="metric-value" id="feel">22 C</span>
+        </div>
+        <div class="metric mid">
+          <span class="metric-title">Hum</span>
+          <span class="metric-value" id="hum">53%</span>
+        </div>
+        <div class="metric right">
+          <span class="metric-title">Wind</span>
+          <span class="metric-value" id="wind">10 km/h</span>
+        </div>
+
+        <div class="label status" id="status">Upd 19:41</div>
+      </div>
+    </section>
+
+    <aside class="controls">
+      <h1>Screen Preview</h1>
+
+      <div class="group">
+        <label>Theme</label>
+        <div class="buttons" data-group="theme">
+          <button data-theme="night">Night</button>
+          <button class="active" data-theme="day">Day</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <label>Weather</label>
+        <div class="buttons" data-group="weather">
+          <button data-weather="clear">Clear</button>
+          <button class="active" data-weather="cloud">Cloud</button>
+          <button data-weather="rain">Rain</button>
+          <button data-weather="snow">Snow</button>
+          <button data-weather="moon">Moon</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <label>Temperature</label>
+        <input id="tempInput" value="23 C" maxlength="8">
+      </div>
+
+      <div class="group">
+        <label>Description</label>
+        <input id="descInput" value="Scattered clouds" maxlength="28">
+      </div>
+
+      <div class="group">
+        <label>Status</label>
+        <input id="statusInput" value="Upd 19:41" maxlength="28">
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const themes = {
+      night: {
+        bg: "#05070a",
+        text: "#f8fafc",
+        muted: "#cbd5e1",
+        dim: "#7d8793",
+        accent: "#ffc857",
+        icon: "#60a5fa"
+      },
+      day: {
+        bg: "#eaf2f7",
+        text: "#111827",
+        muted: "#526171",
+        dim: "#64748b",
+        accent: "#b45309",
+        icon: "#0369a1"
+      }
+    };
+
+    const screen = document.getElementById("screen");
+    const icon = document.getElementById("icon");
+
+    function applyTheme(name) {
+      const theme = themes[name];
+      for (const [key, value] of Object.entries(theme)) {
+        screen.style.setProperty("--" + key, value);
+      }
+    }
+
+    function setWeather(kind) {
+      icon.dataset.weather = kind;
+      const showMoon = kind === "moon";
+      const showCloud = kind === "cloud" || kind === "rain" || kind === "snow";
+      const showRain = kind === "rain";
+      const showSnow = kind === "snow";
+
+      icon.querySelector(".sun").style.display = kind === "clear" || showMoon ? "block" : "none";
+      icon.querySelector(".moon-mask").style.display = showMoon ? "block" : "none";
+      icon.querySelectorAll(".cloud-a, .cloud-b, .cloud-c, .cloud-base").forEach((el) => {
+        el.style.display = showCloud ? "block" : "none";
+      });
+      icon.querySelectorAll(".rain").forEach((el) => {
+        el.style.display = showRain ? "block" : "none";
+      });
+      icon.querySelectorAll(".snow").forEach((el) => {
+        el.style.display = showSnow ? "block" : "none";
+      });
+    }
+
+    document.querySelectorAll("button[data-theme]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll("button[data-theme]").forEach((el) => el.classList.remove("active"));
+        button.classList.add("active");
+        applyTheme(button.dataset.theme);
+      });
+    });
+
+    document.querySelectorAll("button[data-weather]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll("button[data-weather]").forEach((el) => el.classList.remove("active"));
+        button.classList.add("active");
+        setWeather(button.dataset.weather);
+      });
+    });
+
+    document.getElementById("tempInput").addEventListener("input", (event) => {
+      document.getElementById("temp").textContent = event.target.value;
+    });
+
+    document.getElementById("descInput").addEventListener("input", (event) => {
+      document.getElementById("desc").textContent = event.target.value;
+    });
+
+    document.getElementById("statusInput").addEventListener("input", (event) => {
+      document.getElementById("status").textContent = event.target.value;
+    });
+
+    applyTheme("day");
+    setWeather("cloud");
+  </script>
+</body>
+</html>

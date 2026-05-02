@@ -176,16 +176,25 @@ esp_err_t weather_fetch_current(const char *api_key,
     url_encode_component(lang_use, lang_enc, sizeof(lang_enc));
 
     char q[160];
+    int written = 0;
     if (country_enc[0]) {
-        snprintf(q, sizeof(q), "%s,%s", city_enc, country_enc);
+        written = snprintf(q, sizeof(q), "%s,%s", city_enc, country_enc);
     } else {
-        snprintf(q, sizeof(q), "%s", city_enc);
+        written = snprintf(q, sizeof(q), "%s", city_enc);
+    }
+    if (written < 0 || (size_t)written >= sizeof(q)) {
+        ESP_LOGW(TAG, "OpenWeather query is too long");
+        return ESP_ERR_INVALID_SIZE;
     }
 
     char url[384];
-    snprintf(url, sizeof(url),
-             "https://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric&lang=%s",
-             q, api_key, lang_enc);
+    written = snprintf(url, sizeof(url),
+                       "https://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric&lang=%s",
+                       q, api_key, lang_enc);
+    if (written < 0 || (size_t)written >= sizeof(url)) {
+        ESP_LOGW(TAG, "OpenWeather URL is too long");
+        return ESP_ERR_INVALID_SIZE;
+    }
 
     http_buf_t hb = {0};
     esp_http_client_config_t cfg = {

@@ -7,10 +7,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "app_config.h"
+
 #include "esp_err.h"
 #include "esp_log.h"
 
-#include "app_config.h"
 #include "display.h"
 #include "sntp_time.h"
 #include "weather_client.h"
@@ -82,12 +83,12 @@ static const ui_theme_t THEME_NIGHT = {
 };
 
 static const ui_theme_t THEME_DAY = {
-    .bg = 0xf6f8fb,
-    .text = 0x141a22,
-    .muted = 0x3f4b59,
-    .dim = 0x6b7480,
-    .accent = 0xd97706,
-    .icon = 0x0e74b8,
+    .bg = 0xeaf2f7,
+    .text = 0x111827,
+    .muted = 0x526171,
+    .dim = 0x64748b,
+    .accent = 0xb45309,
+    .icon = 0x0369a1,
 };
 
 static bool s_day_theme = false;
@@ -236,7 +237,7 @@ static void ui_create_weather_icon(lv_obj_t *parent)
 
     lv_obj_t *box = lv_obj_create(parent);
     lv_obj_set_size(box, 70, 58);
-    lv_obj_align(box, LV_ALIGN_CENTER, -68, -3);
+    lv_obj_align(box, LV_ALIGN_CENTER, -76, -15);
     lv_obj_set_style_bg_opa(box, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(box, 0, 0);
     lv_obj_set_style_pad_all(box, 0, 0);
@@ -281,9 +282,12 @@ static lv_obj_t *create_dash_col(lv_obj_t *parent,
 
     *value_label = lv_label_create(col);
     lv_label_set_text(*value_label, "--");
+    lv_label_set_long_mode(*value_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_width(*value_label, 74);
     lv_obj_align(*value_label, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_text_font(*value_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(*value_label, lv_color_hex(THEME_NIGHT.text), 0);
+    lv_obj_set_style_text_align(*value_label, LV_TEXT_ALIGN_CENTER, 0);
 
     return col;
 }
@@ -311,48 +315,51 @@ static void ui_create(void)
 
     label_hour = lv_label_create(scr);
     lv_label_set_text(label_hour, "--");
-    lv_obj_align(label_hour, LV_ALIGN_TOP_LEFT, 33, 45);
+    lv_obj_align(label_hour, LV_ALIGN_TOP_LEFT, 29, 45);
     lv_obj_set_style_text_font(label_hour, &lv_font_montserrat_48, 0);
 
     label_colon = lv_label_create(scr);
     lv_label_set_text(label_colon, ":");
-    lv_obj_align(label_colon, LV_ALIGN_TOP_LEFT, 94, 45);
+    lv_obj_align(label_colon, LV_ALIGN_TOP_LEFT, 90, 45);
     lv_obj_set_style_text_font(label_colon, &lv_font_montserrat_48, 0);
 
     label_minute = lv_label_create(scr);
     lv_label_set_text(label_minute, "--");
-    lv_obj_align(label_minute, LV_ALIGN_TOP_LEFT, 112, 45);
+    lv_obj_align(label_minute, LV_ALIGN_TOP_LEFT, 108, 45);
     lv_obj_set_style_text_font(label_minute, &lv_font_montserrat_48, 0);
 
     label_second = lv_label_create(scr);
     lv_label_set_text(label_second, "--");
-    lv_obj_align(label_second, LV_ALIGN_TOP_LEFT, 176, 61);
+    lv_obj_align(label_second, LV_ALIGN_TOP_LEFT, 172, 61);
     lv_obj_set_style_text_font(label_second, &lv_font_montserrat_28, 0);
 
     ui_create_weather_icon(scr);
 
     label_temp = lv_label_create(scr);
-    lv_label_set_text(label_temp, "--.- C");
-    lv_obj_align(label_temp, LV_ALIGN_CENTER, 45, -5);
+    lv_label_set_long_mode(label_temp, LV_LABEL_LONG_CLIP);
+    lv_obj_set_width(label_temp, 144);
+    lv_label_set_text(label_temp, "-- C");
+    lv_obj_align(label_temp, LV_ALIGN_CENTER, 37, -17);
+    lv_obj_set_style_text_align(label_temp, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_text_font(label_temp, &lv_font_montserrat_48, 0);
 
     label_desc = lv_label_create(scr);
     lv_label_set_long_mode(label_desc, LV_LABEL_LONG_DOT);
     lv_obj_set_width(label_desc, 210);
     lv_label_set_text(label_desc, "Updating weather");
-    lv_obj_align(label_desc, LV_ALIGN_CENTER, 0, 50);
+    lv_obj_align(label_desc, LV_ALIGN_CENTER, 0, 38);
     lv_obj_set_style_text_align(label_desc, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(label_desc, &lv_font_montserrat_16, 0);
 
-    create_dash_col(scr, "Feels", &label_feels, LV_ALIGN_BOTTOM_LEFT, 5);
-    create_dash_col(scr, "Humidity", &label_hum, LV_ALIGN_BOTTOM_MID, 0);
+    create_dash_col(scr, "Feel", &label_feels, LV_ALIGN_BOTTOM_LEFT, 5);
+    create_dash_col(scr, "Hum", &label_hum, LV_ALIGN_BOTTOM_MID, 0);
     create_dash_col(scr, "Wind", &label_wind, LV_ALIGN_BOTTOM_RIGHT, -5);
 
     label_status = lv_label_create(scr);
     lv_label_set_long_mode(label_status, LV_LABEL_LONG_DOT);
     lv_obj_set_width(label_status, 220);
     lv_label_set_text(label_status, "Booting");
-    lv_obj_align(label_status, LV_ALIGN_BOTTOM_MID, 0, -6);
+    lv_obj_align(label_status, LV_ALIGN_BOTTOM_MID, 0, -10);
     lv_obj_set_style_text_align(label_status, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(label_status, &lv_font_montserrat_12, 0);
 
@@ -385,7 +392,7 @@ static void ui_set_updated_now(void)
     }
 
     if (!time_is_valid()) {
-        lv_label_set_text(label_status, "Weather updated");
+        lv_label_set_text(label_status, "Updated");
         return;
     }
 
@@ -395,7 +402,7 @@ static void ui_set_updated_now(void)
 
     time(&now);
     localtime_r(&now, &ti);
-    strftime(buf, sizeof(buf), "Updated %H:%M", &ti);
+    strftime(buf, sizeof(buf), "Upd %H:%M", &ti);
     lv_label_set_text(label_status, buf);
 }
 
@@ -486,7 +493,7 @@ static void ui_set_weather(const weather_info_t *w)
     ui_set_weather_icon(weather_icon_kind(w));
 
     char buf[64];
-    snprintf(buf, sizeof(buf), "%.1f °C", w->temp_c);
+    snprintf(buf, sizeof(buf), "%.0f C", w->temp_c);
     lv_label_set_text(label_temp, buf);
 
     char desc[64];
@@ -496,7 +503,7 @@ static void ui_set_weather(const weather_info_t *w)
     }
     lv_label_set_text(label_desc, desc);
 
-    snprintf(buf, sizeof(buf), "%.1f °C", w->feels_like_c);
+    snprintf(buf, sizeof(buf), "%.0f C", w->feels_like_c);
     lv_label_set_text(label_feels, buf);
 
     snprintf(buf, sizeof(buf), "%d%%", w->humidity_pct);
@@ -527,7 +534,7 @@ static void task_weather(void *arg)
     while (1) {
         if (!wifi_manager_is_connected()) {
             lvgl_port_lock(portMAX_DELAY);
-            ui_set_status("Offline, keeping last weather");
+            ui_set_status("Offline");
             ui_set_wifi_status();
             lvgl_port_unlock();
             vTaskDelay(pdMS_TO_TICKS(2000));
@@ -538,7 +545,7 @@ static void task_weather(void *arg)
         memset(&w, 0, sizeof(w));
 
         lvgl_port_lock(portMAX_DELAY);
-        ui_set_status("Fetching weather");
+        ui_set_status("Fetching...");
         ui_set_wifi_status();
         lvgl_port_unlock();
 
@@ -557,7 +564,7 @@ static void task_weather(void *arg)
             lvgl_port_unlock();
             vTaskDelay(pdMS_TO_TICKS((int)WEATHER_UPDATE_MINUTES * 60 * 1000));
         } else {
-            ui_set_status("Weather error, retrying");
+            ui_set_status("Weather error");
             lvgl_port_unlock();
             vTaskDelay(pdMS_TO_TICKS(30000));
         }
@@ -591,8 +598,11 @@ void app_main(void)
     ui_set_status("Running");
     lvgl_port_unlock();
 
-    xTaskCreate(task_clock, "clock", 4096, NULL, 5, NULL);
-    xTaskCreate(task_weather, "weather", 6144, NULL, 5, NULL);
+    BaseType_t task_ok = xTaskCreate(task_clock, "clock", 4096, NULL, 5, NULL);
+    ESP_ERROR_CHECK(task_ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+
+    task_ok = xTaskCreate(task_weather, "weather", 6144, NULL, 5, NULL);
+    ESP_ERROR_CHECK(task_ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
