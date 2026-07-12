@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 #include "app_config.h"
@@ -13,6 +14,8 @@
 #include "esp_log.h"
 
 #include "display.h"
+#include "radar_client.h"
+#include "radar_ui.h"
 #include "sntp_time.h"
 #include "weather_client.h"
 #include "wifi_manager.h"
@@ -21,11 +24,20 @@
 #include "lvgl.h"
 
 LV_FONT_DECLARE(lv_font_montserrat_12);
+LV_FONT_DECLARE(lv_font_montserrat_14);
 LV_FONT_DECLARE(lv_font_montserrat_16);
 LV_FONT_DECLARE(lv_font_montserrat_28);
 LV_FONT_DECLARE(lv_font_montserrat_48);
 
 static const char *TAG = "main";
+
+static lv_obj_t *weather_screen;
+static lv_obj_t *radar_screen;
+static bool showing_radar = false;
+static SemaphoreHandle_t api_mutex;
+static lv_obj_t *boot_screen;
+static lv_obj_t *boot_status;
+static lv_obj_t *boot_bar;
 
 static lv_obj_t *label_city;
 static lv_obj_t *label_wifi;
@@ -52,6 +64,11 @@ static lv_obj_t *label_feels;
 static lv_obj_t *label_hum;
 static lv_obj_t *label_wind;
 static lv_obj_t *label_status;
+static lv_obj_t *decor_header_line;
+static lv_obj_t *decor_weather_panel;
+static lv_obj_t *decor_metrics_panel;
+static lv_obj_t *decor_metric_sep_a;
+static lv_obj_t *decor_metric_sep_b;
 
 typedef struct {
     uint32_t bg;
@@ -60,6 +77,9 @@ typedef struct {
     uint32_t dim;
     uint32_t accent;
     uint32_t icon;
+    uint32_t cloud;
+    uint32_t panel;
+    uint32_t line;
 } ui_theme_t;
 
 typedef enum {
@@ -80,18 +100,71 @@ static const ui_theme_t THEME_NIGHT = {
     .dim = 0x7d8793,
     .accent = 0xffc857,
     .icon = 0x60a5fa,
+    .cloud = 0xcbd5e1,
+    .panel = 0x0b1118,
+    .line = 0x263342,
 };
 
 static const ui_theme_t THEME_DAY = {
-    .bg = 0xeaf2f7,
+    .bg = 0xe7f0f5,
     .text = 0x111827,
-    .muted = 0x526171,
-    .dim = 0x64748b,
+    .muted = 0x374151,
+    .dim = 0x708093,
     .accent = 0xb45309,
     .icon = 0x0369a1,
+    .cloud = 0x6b7a8b,
+    .panel = 0xf3f8fb,
+    .line = 0xb8c7d4,
 };
 
 static bool s_day_theme = false;
+
+static void screen_tap_handler(lv_event_t *event);
+
+static void boot_ui_create(void)
+{
+    boot_screen = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(boot_screen, lv_color_hex(0x05070a), 0);
+    lv_obj_set_style_bg_opa(boot_screen, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(boot_screen, 0, 0);
+    lv_obj_set_style_pad_all(boot_screen, 0, 0);
+
+    lv_obj_t *title = lv_label_create(boot_screen);
+    lv_label_set_text(title, "CLOCK WEATHER");
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x55ef87), 0);
+    lv_obj_align(title, LV_ALIGN_CENTER, 0, -58);
+
+    lv_obj_t *subtitle = lv_label_create(boot_screen);
+    lv_label_set_text(subtitle, "CYD starting");
+    lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(subtitle, lv_color_hex(0x8abf98), 0);
+    lv_obj_align(subtitle, LV_ALIGN_CENTER, 0, -32);
+
+    boot_bar = lv_bar_create(boot_screen);
+    lv_obj_set_size(boot_bar, 190, 8);
+    lv_obj_align(boot_bar, LV_ALIGN_CENTER, 0, 6);
+    lv_obj_set_style_bg_color(boot_bar, lv_color_hex(0x173522), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(boot_bar, lv_color_hex(0x55ef87), LV_PART_INDICATOR);
+    lv_obj_set_style_radius(boot_bar, 2, LV_PART_MAIN | LV_PART_INDICATOR);
+    lv_bar_set_range(boot_bar, 0, 100);
+    lv_bar_set_value(boot_bar, 10, LV_ANIM_OFF);
+
+    boot_status = lv_label_create(boot_screen);
+    lv_label_set_text(boot_status, "Display ready");
+    lv_obj_set_style_text_font(boot_status, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(boot_status, lv_color_hex(0xd7ffe1), 0);
+    lv_obj_align(boot_status, LV_ALIGN_CENTER, 0, 34);
+    lv_screen_load(boot_screen);
+}
+
+static void boot_ui_step(const char *status, int progress)
+{
+    lvgl_port_lock(portMAX_DELAY);
+    if (boot_status) lv_label_set_text(boot_status, status);
+    if (boot_bar) lv_bar_set_value(boot_bar, progress, LV_ANIM_ON);
+    lvgl_port_unlock();
+}
 
 static bool time_is_valid(void)
 {
@@ -120,6 +193,13 @@ static void set_line_color(lv_obj_t *obj, lv_color_t color)
 {
     if (obj) {
         lv_obj_set_style_line_color(obj, color, 0);
+    }
+}
+
+static void set_border_color(lv_obj_t *obj, lv_color_t color)
+{
+    if (obj) {
+        lv_obj_set_style_border_color(obj, color, 0);
     }
 }
 
@@ -163,7 +243,7 @@ static void ui_set_weather_icon(weather_icon_kind_t kind)
 static void ui_apply_theme(bool day)
 {
     const ui_theme_t *theme = day ? &THEME_DAY : &THEME_NIGHT;
-    lv_obj_t *scr = lv_scr_act();
+    lv_obj_t *scr = weather_screen ? weather_screen : lv_scr_act();
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(theme->bg), 0);
     lv_obj_set_style_text_color(scr, lv_color_hex(theme->text), 0);
@@ -184,16 +264,24 @@ static void ui_apply_theme(bool day)
 
     set_obj_bg(icon_sun, lv_color_hex(theme->icon));
     set_obj_bg(icon_moon_mask, lv_color_hex(theme->bg));
-    set_obj_bg(icon_cloud_a, lv_color_hex(theme->muted));
-    set_obj_bg(icon_cloud_b, lv_color_hex(theme->muted));
-    set_obj_bg(icon_cloud_c, lv_color_hex(theme->muted));
-    set_obj_bg(icon_cloud_base, lv_color_hex(theme->muted));
+    set_obj_bg(icon_cloud_a, lv_color_hex(theme->cloud));
+    set_obj_bg(icon_cloud_b, lv_color_hex(theme->cloud));
+    set_obj_bg(icon_cloud_c, lv_color_hex(theme->cloud));
+    set_obj_bg(icon_cloud_base, lv_color_hex(theme->cloud));
     set_obj_bg(icon_snow_1, lv_color_hex(theme->icon));
     set_obj_bg(icon_snow_2, lv_color_hex(theme->icon));
     set_obj_bg(icon_snow_3, lv_color_hex(theme->icon));
     set_line_color(icon_rain_1, lv_color_hex(theme->icon));
     set_line_color(icon_rain_2, lv_color_hex(theme->icon));
     set_line_color(icon_rain_3, lv_color_hex(theme->icon));
+
+    set_obj_bg(decor_header_line, lv_color_hex(theme->line));
+    set_obj_bg(decor_weather_panel, lv_color_hex(theme->panel));
+    set_border_color(decor_weather_panel, lv_color_hex(theme->line));
+    set_obj_bg(decor_metrics_panel, lv_color_hex(theme->panel));
+    set_border_color(decor_metrics_panel, lv_color_hex(theme->line));
+    set_obj_bg(decor_metric_sep_a, lv_color_hex(theme->line));
+    set_obj_bg(decor_metric_sep_b, lv_color_hex(theme->line));
 
     s_day_theme = day;
 }
@@ -227,6 +315,42 @@ static lv_obj_t *create_icon_line(lv_obj_t *parent, const lv_point_precise_t *po
     lv_obj_set_style_line_width(line, 3, 0);
     lv_obj_set_style_line_rounded(line, true, 0);
     return line;
+}
+
+static lv_obj_t *create_deco_panel(lv_obj_t *parent, int w, int h, int x, int y, int radius)
+{
+    lv_obj_t *obj = lv_obj_create(parent);
+    lv_obj_set_size(obj, w, h);
+    lv_obj_align(obj, LV_ALIGN_TOP_LEFT, x, y);
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_radius(obj, radius, 0);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_30, 0);
+    lv_obj_set_style_border_width(obj, 1, 0);
+    lv_obj_set_style_border_opa(obj, LV_OPA_70, 0);
+    lv_obj_set_style_pad_all(obj, 0, 0);
+    return obj;
+}
+
+static lv_obj_t *create_deco_rule(lv_obj_t *parent, int w, int h, int x, int y)
+{
+    lv_obj_t *obj = lv_obj_create(parent);
+    lv_obj_set_size(obj, w, h);
+    lv_obj_align(obj, LV_ALIGN_TOP_LEFT, x, y);
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_radius(obj, 0, 0);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_60, 0);
+    lv_obj_set_style_border_width(obj, 0, 0);
+    lv_obj_set_style_pad_all(obj, 0, 0);
+    return obj;
+}
+
+static void ui_create_decor(lv_obj_t *parent)
+{
+    decor_header_line = create_deco_rule(parent, 220, 1, 10, 39);
+    decor_weather_panel = create_deco_panel(parent, 222, 116, 9, 108, 8);
+    decor_metrics_panel = create_deco_panel(parent, 220, 58, 10, 232, 7);
+    decor_metric_sep_a = create_deco_rule(parent, 1, 34, 82, 244);
+    decor_metric_sep_b = create_deco_rule(parent, 1, 34, 158, 244);
 }
 
 static void ui_create_weather_icon(lv_obj_t *parent)
@@ -268,15 +392,15 @@ static lv_obj_t *create_dash_col(lv_obj_t *parent,
                                  int x_ofs)
 {
     lv_obj_t *col = lv_obj_create(parent);
-    lv_obj_set_size(col, 76, 48);
-    lv_obj_align(col, align, x_ofs, -32);
+    lv_obj_set_size(col, 76, 42);
+    lv_obj_align(col, align, x_ofs, -39);
     lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(col, 0, 0);
     lv_obj_set_style_pad_all(col, 0, 0);
 
     lv_obj_t *title_label = lv_label_create(col);
     lv_label_set_text(title_label, title);
-    lv_obj_align(title_label, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_align(title_label, LV_ALIGN_TOP_MID, 0, 3);
     lv_obj_set_style_text_font(title_label, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(title_label, lv_color_hex(THEME_NIGHT.dim), 0);
 
@@ -284,7 +408,7 @@ static lv_obj_t *create_dash_col(lv_obj_t *parent,
     lv_label_set_text(*value_label, "--");
     lv_label_set_long_mode(*value_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(*value_label, 74);
-    lv_obj_align(*value_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_align(*value_label, LV_ALIGN_TOP_MID, 0, 21);
     lv_obj_set_style_text_font(*value_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(*value_label, lv_color_hex(THEME_NIGHT.text), 0);
     lv_obj_set_style_text_align(*value_label, LV_TEXT_ALIGN_CENTER, 0);
@@ -295,6 +419,9 @@ static lv_obj_t *create_dash_col(lv_obj_t *parent,
 static void ui_create(void)
 {
     lv_obj_t *scr = lv_scr_act();
+    weather_screen = scr;
+
+    ui_create_decor(scr);
 
     label_city = lv_label_create(scr);
     lv_label_set_long_mode(label_city, LV_LABEL_LONG_DOT);
@@ -332,13 +459,14 @@ static void ui_create(void)
     lv_label_set_text(label_second, "--");
     lv_obj_align(label_second, LV_ALIGN_TOP_LEFT, 172, 61);
     lv_obj_set_style_text_font(label_second, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_opa(label_second, LV_OPA_70, 0);
 
     ui_create_weather_icon(scr);
 
     label_temp = lv_label_create(scr);
     lv_label_set_long_mode(label_temp, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(label_temp, 144);
-    lv_label_set_text(label_temp, "-- C");
+    lv_label_set_text(label_temp, "--\xC2\xB0");
     lv_obj_align(label_temp, LV_ALIGN_CENTER, 37, -17);
     lv_obj_set_style_text_align(label_temp, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_text_font(label_temp, &lv_font_montserrat_48, 0);
@@ -351,9 +479,12 @@ static void ui_create(void)
     lv_obj_set_style_text_align(label_desc, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(label_desc, &lv_font_montserrat_16, 0);
 
-    create_dash_col(scr, "Feel", &label_feels, LV_ALIGN_BOTTOM_LEFT, 5);
+    create_dash_col(scr, "Feel", &label_feels, LV_ALIGN_BOTTOM_LEFT, 10);
     create_dash_col(scr, "Hum", &label_hum, LV_ALIGN_BOTTOM_MID, 0);
-    create_dash_col(scr, "Wind", &label_wind, LV_ALIGN_BOTTOM_RIGHT, -5);
+    create_dash_col(scr, "Wind", &label_wind, LV_ALIGN_BOTTOM_RIGHT, -10);
+    lv_obj_set_width(label_wind, 82);
+    lv_obj_align(label_wind, LV_ALIGN_TOP_MID, 0, 22);
+    lv_obj_set_style_text_font(label_wind, &lv_font_montserrat_14, 0);
 
     label_status = lv_label_create(scr);
     lv_label_set_long_mode(label_status, LV_LABEL_LONG_DOT);
@@ -364,6 +495,40 @@ static void ui_create(void)
     lv_obj_set_style_text_font(label_status, &lv_font_montserrat_12, 0);
 
     ui_apply_theme(false);
+}
+
+static void add_weather_switch_button(lv_obj_t *screen)
+{
+    lv_obj_t *button = lv_button_create(screen);
+    lv_obj_set_size(button, 57, 24);
+    lv_obj_align(button, LV_ALIGN_BOTTOM_RIGHT, -4, -3);
+    lv_obj_set_style_radius(button, 4, 0);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x123c24), 0);
+    lv_obj_set_style_border_width(button, 1, 0);
+    lv_obj_set_style_border_color(button, lv_color_hex(0x2c8c4d), 0);
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_add_event_cb(button, screen_tap_handler, LV_EVENT_PRESSED, NULL);
+
+    lv_obj_t *label = lv_label_create(button);
+    lv_label_set_text(label, "RADAR");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(label, lv_color_hex(0xd7ffe1), 0);
+    lv_obj_center(label);
+}
+
+static void screen_tap_handler(lv_event_t *event)
+{
+    (void)event;
+    if (!weather_screen || !radar_screen) {
+        return;
+    }
+
+    showing_radar = !showing_radar;
+    lv_screen_load_anim(showing_radar ? radar_screen : weather_screen,
+                        LV_SCREEN_LOAD_ANIM_FADE_IN,
+                        220,
+                        0,
+                        false);
 }
 
 static void ui_set_status(const char *txt)
@@ -402,7 +567,7 @@ static void ui_set_updated_now(void)
 
     time(&now);
     localtime_r(&now, &ti);
-    strftime(buf, sizeof(buf), "Upd %H:%M", &ti);
+    strftime(buf, sizeof(buf), "%H:%M", &ti);
     lv_label_set_text(label_status, buf);
 }
 
@@ -489,11 +654,12 @@ static void ui_set_weather(const weather_info_t *w)
 
     bool is_day = weather_is_day(w);
     ui_apply_theme(is_day);
+    ESP_ERROR_CHECK_WITHOUT_ABORT(display_set_brightness(is_day ? 100 : 35));
     ui_set_wifi_status();
     ui_set_weather_icon(weather_icon_kind(w));
 
     char buf[64];
-    snprintf(buf, sizeof(buf), "%.0f C", w->temp_c);
+    snprintf(buf, sizeof(buf), "%.0f\xC2\xB0", w->temp_c);
     lv_label_set_text(label_temp, buf);
 
     char desc[64];
@@ -503,7 +669,7 @@ static void ui_set_weather(const weather_info_t *w)
     }
     lv_label_set_text(label_desc, desc);
 
-    snprintf(buf, sizeof(buf), "%.0f C", w->feels_like_c);
+    snprintf(buf, sizeof(buf), "%.0f\xC2\xB0", w->feels_like_c);
     lv_label_set_text(label_feels, buf);
 
     snprintf(buf, sizeof(buf), "%d%%", w->humidity_pct);
@@ -549,6 +715,7 @@ static void task_weather(void *arg)
         ui_set_wifi_status();
         lvgl_port_unlock();
 
+        xSemaphoreTake(api_mutex, portMAX_DELAY);
         esp_err_t ret = weather_fetch_current(
             OWM_API_KEY,
             OWM_CITY,
@@ -556,6 +723,7 @@ static void task_weather(void *arg)
             OWM_LANG,
             &w,
             12000);
+        xSemaphoreGive(api_mutex);
 
         lvgl_port_lock(portMAX_DELAY);
         if (ret == ESP_OK) {
@@ -571,8 +739,91 @@ static void task_weather(void *arg)
     }
 }
 
+static void task_radar(void *arg)
+{
+    (void)arg;
+
+    vTaskDelay(pdMS_TO_TICKS(8000));
+
+    while (1) {
+        if (!wifi_manager_is_connected()) {
+            lvgl_port_lock(portMAX_DELAY);
+            radar_ui_set_status("Waiting for Wi-Fi");
+            lvgl_port_unlock();
+            vTaskDelay(pdMS_TO_TICKS(3000));
+            continue;
+        }
+
+        lvgl_port_lock(portMAX_DELAY);
+        radar_ui_set_status("Updating live traffic");
+        lvgl_port_unlock();
+
+        radar_snapshot_t snapshot;
+        xSemaphoreTake(api_mutex, portMAX_DELAY);
+        esp_err_t ret = radar_fetch_nearby(
+            RADAR_CENTER_LAT,
+            RADAR_CENTER_LON,
+            RADAR_RADIUS_KM,
+            &snapshot,
+            15000);
+        xSemaphoreGive(api_mutex);
+
+        lvgl_port_lock(portMAX_DELAY);
+        if (ret == ESP_OK) {
+            radar_ui_update(&snapshot);
+        } else {
+            radar_ui_set_status("Radar update failed");
+        }
+        lvgl_port_unlock();
+
+        vTaskDelay(pdMS_TO_TICKS(ret == ESP_OK ? RADAR_UPDATE_SECONDS * 1000 : 15000));
+    }
+}
+
+static void task_radar_details(void *arg)
+{
+    (void)arg;
+    char last_callsign[12] = {0};
+    uint32_t last_attempt = 0;
+
+    while (1) {
+        radar_aircraft_t selected = {0};
+        lvgl_port_lock(portMAX_DELAY);
+        bool have_selected = radar_ui_get_selected(&selected);
+        lvgl_port_unlock();
+
+        bool changed = have_selected && strcmp(last_callsign, selected.callsign) != 0;
+        bool retry = have_selected && !selected.origin[0] &&
+                     (lv_tick_get() - last_attempt) > 60000;
+        if (changed || retry) {
+            snprintf(last_callsign, sizeof(last_callsign), "%s", selected.callsign);
+            last_attempt = lv_tick_get();
+            lvgl_port_lock(portMAX_DELAY);
+            radar_ui_set_selected_details(&selected, false);
+            lvgl_port_unlock();
+
+            xSemaphoreTake(api_mutex, portMAX_DELAY);
+            (void)radar_enrich_aircraft(&selected, 10000);
+            xSemaphoreGive(api_mutex);
+
+            lvgl_port_lock(portMAX_DELAY);
+            radar_ui_set_selected_details(&selected, true);
+            lvgl_port_unlock();
+        }
+        vTaskDelay(pdMS_TO_TICKS(250));
+    }
+}
+
 void app_main(void)
 {
+    api_mutex = xSemaphoreCreateMutex();
+    ESP_ERROR_CHECK(api_mutex ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(display_init());
+    lvgl_port_lock(portMAX_DELAY);
+    boot_ui_create();
+    lvgl_port_unlock();
+    boot_ui_step("Connecting Wi-Fi", 25);
+
     wifi_manager_cfg_t cfg = {
         .ssid = WIFI_SSID,
         .pass = WIFI_PASS,
@@ -583,17 +834,25 @@ void app_main(void)
     esp_err_t ret = wifi_manager_wait_connected(pdMS_TO_TICKS(30000));
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Wi-Fi timeout, continuing without initial connection: %s", esp_err_to_name(ret));
+        boot_ui_step("Wi-Fi offline", 45);
     } else {
         ESP_LOGI(TAG, "Wi-Fi connected");
+        boot_ui_step("Wi-Fi connected", 50);
     }
 
+    boot_ui_step("Synchronizing time", 65);
     sntp_time_init(APP_TIMEZONE);
     (void)sntp_time_wait(20, 1000);
-
-    ESP_ERROR_CHECK(display_init());
+    boot_ui_step(time_is_valid() ? "Time synchronized" : "Time pending", 78);
+    boot_ui_step("Creating interface", 88);
+    vTaskDelay(pdMS_TO_TICKS(250));
 
     lvgl_port_lock(portMAX_DELAY);
     ui_create();
+    radar_screen = radar_ui_create(screen_tap_handler);
+    add_weather_switch_button(weather_screen);
+    showing_radar = true;
+    lv_screen_load(radar_screen);
     ui_set_time_now();
     ui_set_status("Running");
     lvgl_port_unlock();
@@ -602,6 +861,12 @@ void app_main(void)
     ESP_ERROR_CHECK(task_ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     task_ok = xTaskCreate(task_weather, "weather", 6144, NULL, 5, NULL);
+    ESP_ERROR_CHECK(task_ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+
+    task_ok = xTaskCreate(task_radar, "radar", 8192, NULL, 5, NULL);
+    ESP_ERROR_CHECK(task_ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+
+    task_ok = xTaskCreate(task_radar_details, "radar_details", 8192, NULL, 4, NULL);
     ESP_ERROR_CHECK(task_ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     while (1) {

@@ -5,6 +5,8 @@ idf_component_register(
         "wifi_manager.c"
         "sntp_time.c"
         "weather_client.c"
+        "radar_client.c"
+        "radar_ui.c"
     INCLUDE_DIRS
         "."
     PRIV_REQUIRES

@@ -1,12 +1,15 @@
 #include "display.h"
 
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "driver/spi_master.h"
+#include "esp_check.h"
 #include "esp_log.h"
 
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
+#include "esp_lcd_touch_xpt2046.h"
 
 #include "esp_lvgl_port.h"
 #include "lvgl.h"
@@ -14,6 +17,7 @@
 static const char *TAG = "display";
 
 #define LCD_HOST         SPI2_HOST
+#define TOUCH_HOST       SPI3_HOST
 
 // Cheap Yellow Display pins (ESP32-2432S028R).
 #define PIN_LCD_SCLK     14
@@ -23,8 +27,58 @@ static const char *TAG = "display";
 #define PIN_LCD_RST      -1
 #define PIN_LCD_BK       21
 
+// XPT2046 touch pins on ESP32-2432S028R.
+#define PIN_TOUCH_SCLK   25
+#define PIN_TOUCH_MOSI   32
+#define PIN_TOUCH_MISO   39
+#define PIN_TOUCH_CS     33
+
 #define LCD_HRES         240
 #define LCD_VRES         320
+
+// Typical calibrated ADC limits for the ESP32-2432S028R touch panel. The
+// XPT2046 component has already scaled raw ADC values to LCD_HRES/LCD_VRES
+// before this callback runs.
+#define TOUCH_X_LEFT_SCALED     226
+#define TOUCH_X_RIGHT_SCALED     16
+#define TOUCH_Y_TOP_SCALED       27
+#define TOUCH_Y_BOTTOM_SCALED   301
+
+static uint16_t map_touch_axis(int32_t value, int32_t input_min, int32_t input_max,
+                               uint16_t output_max)
+{
+    int32_t mapped = (value - input_min) * output_max / (input_max - input_min);
+    if (mapped < 0) {
+        return 0;
+    }
+    if (mapped > output_max) {
+        return output_max;
+    }
+    return (uint16_t)mapped;
+}
+
+static void calibrate_touch(esp_lcd_touch_handle_t touch, uint16_t *x, uint16_t *y,
+                            uint16_t *strength, uint8_t *point_count, uint8_t max_points)
+{
+    (void)touch;
+    (void)strength;
+    uint8_t count = *point_count < max_points ? *point_count : max_points;
+    for (uint8_t i = 0; i < count; i++) {
+        x[i] = map_touch_axis(x[i], TOUCH_X_LEFT_SCALED, TOUCH_X_RIGHT_SCALED, LCD_HRES - 1);
+        y[i] = map_touch_axis(y[i], TOUCH_Y_TOP_SCALED, TOUCH_Y_BOTTOM_SCALED, LCD_VRES - 1);
+    }
+}
+
+esp_err_t display_set_brightness(uint8_t percent)
+{
+    if (percent > 100) {
+        percent = 100;
+    }
+    uint32_t duty = (percent * 255U) / 100U;
+    ESP_RETURN_ON_ERROR(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty), TAG,
+                        "set backlight duty");
+    return ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+}
 
 esp_err_t display_init(void)
 {
@@ -69,15 +123,23 @@ esp_err_t display_init(void)
     // Enable and tune if the image is shifted on a display variant.
     // ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel, 0, 34));
 
-    gpio_config_t bk = {
-        .pin_bit_mask = 1ULL << PIN_LCD_BK,
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_down_en = 0,
-        .pull_up_en = 0,
-        .intr_type = GPIO_INTR_DISABLE,
+    ledc_timer_config_t backlight_timer = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_8_BIT,
+        .timer_num = LEDC_TIMER_0,
+        .freq_hz = 5000,
+        .clk_cfg = LEDC_AUTO_CLK,
     };
-    ESP_ERROR_CHECK(gpio_config(&bk));
-    gpio_set_level(PIN_LCD_BK, 1);
+    ESP_ERROR_CHECK(ledc_timer_config(&backlight_timer));
+    ledc_channel_config_t backlight_channel = {
+        .gpio_num = PIN_LCD_BK,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel = LEDC_CHANNEL_0,
+        .timer_sel = LEDC_TIMER_0,
+        .duty = 255,
+        .hpoint = 0,
+    };
+    ESP_ERROR_CHECK(ledc_channel_config(&backlight_channel));
 
     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
     ESP_ERROR_CHECK(lvgl_port_init(&lvgl_cfg));
@@ -101,6 +163,48 @@ esp_err_t display_init(void)
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "Display OK (%dx%d)", LCD_HRES, LCD_VRES);
+    spi_bus_config_t touch_buscfg = {
+        .sclk_io_num = PIN_TOUCH_SCLK,
+        .mosi_io_num = PIN_TOUCH_MOSI,
+        .miso_io_num = PIN_TOUCH_MISO,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 32,
+    };
+    ESP_ERROR_CHECK(spi_bus_initialize(TOUCH_HOST, &touch_buscfg, SPI_DMA_DISABLED));
+
+    esp_lcd_panel_io_handle_t touch_io = NULL;
+    esp_lcd_panel_io_spi_config_t touch_io_cfg = ESP_LCD_TOUCH_IO_SPI_XPT2046_CONFIG(PIN_TOUCH_CS);
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(
+        (esp_lcd_spi_bus_handle_t)TOUCH_HOST,
+        &touch_io_cfg,
+        &touch_io));
+
+    esp_lcd_touch_handle_t touch = NULL;
+    esp_lcd_touch_config_t touch_cfg = {
+        .x_max = LCD_HRES,
+        .y_max = LCD_VRES,
+        .rst_gpio_num = GPIO_NUM_NC,
+        .int_gpio_num = GPIO_NUM_NC,
+        .process_coordinates = calibrate_touch,
+        .flags = {
+            .swap_xy = 0,
+            .mirror_x = 0,
+            .mirror_y = 0,
+        },
+    };
+    ESP_ERROR_CHECK(esp_lcd_touch_new_spi_xpt2046(touch_io, &touch_cfg, &touch));
+
+    const lvgl_port_touch_cfg_t lvgl_touch_cfg = {
+        .disp = disp,
+        .handle = touch,
+    };
+    lv_indev_t *touch_indev = lvgl_port_add_touch(&lvgl_touch_cfg);
+    if (!touch_indev) {
+        ESP_LOGE(TAG, "lvgl_port_add_touch failed");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "Display and touch OK (%dx%d)", LCD_HRES, LCD_VRES);
     return ESP_OK;
 }
